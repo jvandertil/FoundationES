@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using FoundationDB.Client;
 
 namespace FoundationES
 {
-    public class EventStore : IEventStore, IDisposable
+    public class EventStore : IEventStore
     {
         private readonly IFdbDatabase _db;
         private readonly FdbSubspace _eventStoreSpace;
@@ -24,18 +24,16 @@ namespace FoundationES
 
         public async Task ClearAsync(CancellationToken token)
         {
-            if (!token.IsCancellationRequested)
-            {
-                await _db.ClearRangeAsync(_eventStoreSpace, token);
-            }
+            await _db.ClearRangeAsync(_eventStoreSpace, token);
         }
 
-        public async Task AppendToAggregateAsync(string aggregId, long expectedVersion, IEnumerable<Envelope> events, CancellationToken token)
+        public async Task AppendToAggregateAsync(string aggregId, long expectedVersion, Envelope[] events, CancellationToken token)
         {
+            var aggregateSpace = _eventStoreSpace.Partition(AggregatePrefix, aggregId);
+
             await _db.ReadWriteAsync(async trans =>
             {
-                var aggregateSpace = _eventStoreSpace.Partition(AggregatePrefix, aggregId);
-                var nextKeyIndex = await GetNextKeyIndex(trans, aggregateSpace);
+                var nextKeyIndex = await GetNextKeyIndexAsync(trans, aggregateSpace);
 
                 switch (expectedVersion)
                 {
@@ -55,22 +53,20 @@ namespace FoundationES
                         break;
                 }
 
-                long index = 0;
-                foreach (var item in events)
+                for (int i = 0; i < events.Length; ++i)
                 {
-                    long aggregateIndex = nextKeyIndex + index;
+                    Envelope item = events[i];
+
+                    long aggregateIndex = nextKeyIndex + i;
 
                     var aggregKey = aggregateSpace.Partition(aggregateIndex, item.ContractName);
 
                     trans.Set(aggregKey, Slice.Create(item.Data));
-
-                    ++index;
                 }
-
             }, token);
         }
 
-        private async Task<long> GetNextKeyIndex(IFdbTransaction trans, FdbSubspace aggregSpace)
+        private async Task<long> GetNextKeyIndexAsync(IFdbTransaction trans, FdbSubspace aggregSpace)
         {
             var keyRange = FdbKeyRange.StartsWith(aggregSpace);
             var keySelector = FdbKeySelector.LastLessThan(keyRange.End);
@@ -89,10 +85,12 @@ namespace FoundationES
 
             if (!aggregSpace.Contains(lastKey))
             {
+                // TODO: Add metrics here. Event store subspace is completely empty?
                 return 0;
             }
 
-            throw new Exception();
+            // TODO: Add metrics here.
+            return 0;
         }
 
         public async Task<IEnumerable<AggregateEvent>> ReadAllFromAggregateAsync(string aggregId, CancellationToken token)
@@ -101,9 +99,9 @@ namespace FoundationES
             {
                 var aggregateSpace = _eventStoreSpace.Partition(AggregatePrefix, aggregId);
                 var keyRange = FdbKeyRange.PrefixedBy(aggregateSpace);
-                var options = new FdbRangeOptions(null, false, null, FdbStreamingMode.WantAll);
+                var options = new FdbRangeOptions() { Mode = FdbStreamingMode.WantAll };
 
-                var rangeFuture = trans.GetRange(keyRange, options);
+                var rangeFuture = trans.Snapshot.GetRange(keyRange, options);
 
                 return rangeFuture.Select(kv =>
                 {
@@ -114,18 +112,6 @@ namespace FoundationES
                     return new AggregateEvent(contract, index, kv.Value.GetBytes());
                 });
             }, token);
-        }
-
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _db.Dispose();
-
-            _disposed = true;
         }
     }
 }

@@ -8,7 +8,7 @@ namespace FoundationES
     {
         Task ClearAsync(CancellationToken token);
 
-        Task AppendToAggregateAsync(string aggregId, long expectedVersion, IEnumerable<Envelope> events, CancellationToken token);
+        Task AppendToAggregateAsync(string aggregId, long expectedVersion, Envelope[] events, CancellationToken token);
 
         Task<IEnumerable<AggregateEvent>> ReadAllFromAggregateAsync(string aggregId, CancellationToken token);
     }
