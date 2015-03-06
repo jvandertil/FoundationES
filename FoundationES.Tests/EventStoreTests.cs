@@ -19,33 +19,12 @@ namespace FoundationES.Tests
             private const string AggregId2 = "otherAggreg";
 
             [SetUp]
-            public void Setup()
+            public void SetUp()
             {
                 _db = Fdb.OpenAsync().Result;
                 _subspace = FdbSubspace.Create(FdbTuple.Create("FoundationES.ClearAsyncTest"));
 
                 _eventStore = new EventStore(_db, _subspace);
-            }
-
-            private async Task AddEventsToSubspace(FdbSubspace space)
-            {
-                var t1 = _db.WriteAsync(trans => trans.Set(space, FdbTuple.Create(AggregId), Slice.Create(new byte[100])), CancellationToken.None);
-                var t2 = _db.WriteAsync(trans => trans.Set(space, FdbTuple.Create(AggregId2), Slice.Create(new byte[100])), CancellationToken.None);
-
-                await Task.WhenAll(t1, t2);
-            }
-
-            private async Task AssertSubspaceHasData(FdbSubspace space)
-            {
-                var beforeErase = await _db.QueryAsync(trans => trans.GetRange(FdbKeyRange.PrefixedBy(space)), CancellationToken.None);
-                Assert.That(beforeErase.Any());
-            }
-
-            private async Task AssertSubspaceIsEmpty(FdbSubspace space)
-            {
-                var afterErase = await _db.QueryAsync(trans => trans.GetRange(FdbKeyRange.PrefixedBy(space)), CancellationToken.None);
-
-                Assert.That(!afterErase.Any());
             }
 
             [Test]
@@ -94,6 +73,35 @@ namespace FoundationES.Tests
                 _eventStore = null;
                 _db = null;
             }
+
+            #region Helpers
+            private async Task AddEventsToSubspace(FdbSubspace space)
+            {
+                var t1 = _db.WriteAsync(trans => trans.Set(space, FdbTuple.Create(AggregId), Slice.Create(new byte[100])), CancellationToken.None);
+                var t2 = _db.WriteAsync(trans => trans.Set(space, FdbTuple.Create(AggregId2), Slice.Create(new byte[100])), CancellationToken.None);
+
+                await Task.WhenAll(t1, t2);
+            }
+
+            private async Task AssertSubspaceHasData(FdbSubspace space)
+            {
+                var beforeErase = await _db.QueryAsync(trans => trans.GetRange(FdbKeyRange.PrefixedBy(space)), CancellationToken.None);
+                Assert.That(beforeErase.Any());
+            }
+
+            private async Task AssertSubspaceIsEmpty(FdbSubspace space)
+            {
+                var afterErase = await _db.QueryAsync(trans => trans.GetRange(FdbKeyRange.PrefixedBy(space)), CancellationToken.None);
+
+                Assert.That(!afterErase.Any());
+            }
+            #endregion
         }
+    
+        [TestFixture]
+        public class AppendToAggregateAsync { }
+
+        [TestFixture]
+        public class ReadAllFromAggregateAsync { }
     }
 }
