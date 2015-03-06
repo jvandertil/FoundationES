@@ -10,7 +10,7 @@ namespace FoundationES
         }
 
         public ConcurrencyViolationException(string aggregId, long expectedVersion, long version)
-            : base(string.Format("Expected '{0}' to be ver. '{1}' but got '{2}'", aggregId, expectedVersion, version))
+            : base(string.Format("Expected '{0}' to be ver. '{1}' but got '{2}'.", aggregId, expectedVersion, version))
         {
         }
 
